@@ -1,0 +1,464 @@
+import React, { useState, useRef } from 'react';
+import { Radiation, AlertTriangle, FileText, CheckCircle2, XCircle, ArrowRight, Download, User, Loader2, RotateCcw } from 'lucide-react';
+
+// 預設測驗題目
+const quizQuestions = [
+  {
+    id: 1,
+    question: "輻射防護的「ALARA」原則，其核心意義為何？",
+    options: [
+      "將輻射劑量盡可能降至最低 (As Low As Reasonably Achievable)",
+      "完全隔絕所有游離輻射的暴露",
+      "限制特定非專業人員進入輻射管制區",
+      "只在必要時才穿著鉛衣等防護裝備"
+    ],
+    correct: 0,
+    explanation: "ALARA 原則代表在考量經濟與社會因素後，應將輻射曝露保持在合理抑低之盡可能低的水準，這是輻射防護的最基本核心。"
+  },
+  {
+    id: 2,
+    question: "在進行移動式 X 光機攝影時，若無屏蔽設施，工作人員應至少距離射源多遠？",
+    options: [
+      "1 公尺",
+      "2 公尺",
+      "3 公尺",
+      "不需要特別保持距離，背對即可"
+    ],
+    correct: 1,
+    explanation: "依據輻射防護規範，無屏蔽時應與射源保持至少 2 公尺（約 6 英尺）以上的距離，以利用距離平方反比定律有效降低受迫劑量。"
+  },
+  {
+    id: 3,
+    question: "關於人員輻射劑量計的佩戴，下列敘述何者最為正確？",
+    options: [
+      "應佩戴於鉛衣外側",
+      "應佩戴於鉛衣內側（軀幹部位）",
+      "可以放置於口袋中不露出",
+      "放置於抽屜內即可記錄環境劑量"
+    ],
+    correct: 1,
+    explanation: "一般情況下，人員劑量計應佩戴於鉛衣內側（軀幹部位），以準確評估人員實際接受的全身有效劑量。若有特殊規定需配戴兩枚，則內外各一。"
+  },
+  {
+    id: 4,
+    question: "為有效降低體外游離輻射曝露，應掌握的三大基本防護原則為何？",
+    options: [
+      "時間、距離、屏蔽",
+      "通風、隔離、消毒",
+      "監測、管制、通報",
+      "鉛衣、手套、護目鏡"
+    ],
+    correct: 0,
+    explanation: "體外輻射防護的三大原則為：縮短曝露「時間」、增加與射源的「距離」、以及在射源與人體之間增加適當的「屏蔽」。"
+  },
+  {
+    id: 5,
+    question: "懷孕的女性輻射工作人員，其剩餘妊娠期間的腹部表面等效劑量限度為何？",
+    options: [
+      "1 毫西弗 (mSv)",
+      "2 毫西弗 (mSv)",
+      "5 毫西弗 (mSv)",
+      "10 毫西弗 (mSv)"
+    ],
+    correct: 1,
+    explanation: "依據游離輻射防護安全標準，女性輻射工作人員確知懷孕後，其剩餘妊娠期間之下腹部表面之等效劑量，不得超過 2 毫西弗。"
+  }
+];
+
+export default function App() {
+  const [step, setStep] = useState('cover'); // 'cover', 'userInfo', 'quiz', 'report'
+  const [userInfo, setUserInfo] = useState({ department: '', name: '', jobCategory: '' });
+  const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
+  const [userAnswers, setUserAnswers] = useState([]);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const reportRef = useRef(null);
+
+  const handleRetake = () => {
+    setStep('cover');
+    setUserInfo({ department: '', name: '', jobCategory: '' });
+    setCurrentQIndex(0);
+    setSelectedOption(null);
+    setIsAnswerSubmitted(false);
+    setUserAnswers([]);
+  };
+
+  const handleStartInfo = () => {
+    setStep('userInfo');
+  };
+
+  const handleStartQuiz = () => {
+    if (!userInfo.department.trim() || !userInfo.name.trim() || !userInfo.jobCategory.trim()) {
+      alert("請填寫完整的科室單位、職類與姓名");
+      return;
+    }
+    setStep('quiz');
+    setCurrentQIndex(0);
+    setUserAnswers([]);
+  };
+
+  const handleOptionSelect = (index) => {
+    if (isAnswerSubmitted) return;
+    
+    setSelectedOption(index);
+    setIsAnswerSubmitted(true);
+    
+    const isCorrect = index === quizQuestions[currentQIndex].correct;
+    setUserAnswers(prev => [...prev, {
+      questionId: quizQuestions[currentQIndex].id,
+      isCorrect,
+      selected: index,
+      questionText: quizQuestions[currentQIndex].question,
+      explanation: quizQuestions[currentQIndex].explanation
+    }]);
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQIndex < quizQuestions.length - 1) {
+      setCurrentQIndex(prev => prev + 1);
+      setSelectedOption(null);
+      setIsAnswerSubmitted(false);
+    } else {
+      setStep('report');
+    }
+  };
+
+  const handleComplete = async () => {
+    setIsDownloading(true);
+    
+    try {
+      if (!window.html2pdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+      }
+
+      const element = reportRef.current;
+      const opt = {
+        margin:       [0, 0, 0, 0],
+        filename:     `${userInfo.name}_輻射防護報告.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true, 
+          backgroundColor: '#171717', 
+          scrollY: 0, 
+          windowWidth: 800 
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await window.html2pdf().set(opt).from(element).save();
+
+      const wrongAnswers = userAnswers.filter(a => !a.isCorrect);
+      const score = (userAnswers.filter(a => a.isCorrect).length / quizQuestions.length) * 100;
+      
+      const payload = {
+        department: userInfo.department,
+        jobCategory: userInfo.jobCategory,
+        name: userInfo.name,
+        score: score.toFixed(0),
+        timestamp: new Date().toISOString()
+      };
+
+      const googleAppsScriptUrl = "https://script.google.com/macros/s/AKfycbwbIcgORYwHixs6d-XO45ztdHsTIZuLndyLcs1A9EGwEhkTQ01816s-CZ5SYKWfr2cAGw/exec"; 
+      
+      await fetch(googleAppsScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      
+      alert("報告已以 PDF 格式下載至您的裝置！\n(系統後台已同步將成績回傳至您的 Google 試算表)");
+    } catch (error) {
+      console.error("處理失敗", error);
+      alert("產出 PDF 時發生錯誤，請稍後再試。");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  if (step === 'cover') {
+    return (
+      <div className="h-[100dvh] bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-4 sm:p-6 font-sans overflow-hidden">
+        <div className="max-w-2xl w-full flex flex-col items-center text-center space-y-6 sm:space-y-8 animate-fade-in">
+          <div className="bg-yellow-400 p-5 sm:p-6 rounded-full shadow-[0_0_40px_rgba(250,204,21,0.3)]">
+            <Radiation className="w-20 h-20 sm:w-24 sm:h-24 text-neutral-900" strokeWidth={1.5} />
+          </div>
+          
+          <div className="space-y-3 sm:space-y-4">
+            <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight text-yellow-400 leading-tight">
+              大林慈濟醫院<br />輻射防護互動式測驗
+            </h1>
+            <h2 className="text-sm sm:text-xl md:text-2xl font-light tracking-widest text-neutral-400">
+              Radiation Safety Interactive Quiz<br />Dalin Tzu-Chi Hospital
+            </h2>
+          </div>
+
+          <button 
+            onClick={handleStartInfo}
+            className="mt-6 px-6 py-3 sm:px-8 sm:py-4 bg-yellow-400 text-neutral-900 text-base sm:text-lg font-bold rounded hover:bg-yellow-300 transition-colors duration-300 flex items-center shadow-lg"
+          >
+            進入測驗 <ArrowRight className="ml-2 w-5 h-5" />
+          </button>
+
+          <div className="pt-10 sm:pt-16 border-t border-neutral-800 w-full mt-4">
+            <p className="text-xs sm:text-sm text-neutral-500 uppercase tracking-widest">
+              Dalin Tzu-Chi Radiation Protection Team<br />
+              版本日期 2026.04 v2
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'userInfo') {
+    return (
+      <div className="h-[100dvh] bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-4 font-sans overflow-hidden">
+        <div className="max-w-md w-full bg-neutral-800 p-6 sm:p-8 rounded-xl border border-neutral-700 shadow-2xl flex flex-col max-h-[95dvh]">
+          <div className="flex items-center text-yellow-400 mb-4 sm:mb-6 flex-shrink-0">
+            <User className="w-6 h-6 sm:w-8 sm:h-8 mr-3" />
+            <h2 className="text-xl sm:text-2xl font-bold tracking-wider">作答人員資料</h2>
+          </div>
+
+          <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-grow">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-neutral-400 mb-1 sm:mb-2">科室單位 (院外請加上醫院)</label>
+              <input 
+                type="text" 
+                value={userInfo.department}
+                onChange={(e) => setUserInfo({...userInfo, department: e.target.value})}
+                placeholder="例如：放射科 / OO醫院急診室"
+                className="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-neutral-400 mb-1 sm:mb-2">職類</label>
+              <input 
+                type="text" 
+                value={userInfo.jobCategory}
+                onChange={(e) => setUserInfo({...userInfo, jobCategory: e.target.value})}
+                placeholder="例如：醫師、護理師、醫事放射師"
+                className="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-neutral-400 mb-1 sm:mb-2">姓名</label>
+              <input 
+                type="text" 
+                value={userInfo.name}
+                onChange={(e) => setUserInfo({...userInfo, name: e.target.value})}
+                placeholder="請輸入您的姓名"
+                className="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base"
+              />
+            </div>
+          </div>
+
+          <button 
+            onClick={handleStartQuiz}
+            className="w-full mt-6 px-4 py-3 sm:px-6 sm:py-4 bg-yellow-400 text-neutral-900 text-base sm:text-lg font-bold rounded hover:bg-yellow-300 transition-colors duration-300 flex items-center justify-center flex-shrink-0"
+          >
+            開始能力評估 <ArrowRight className="ml-2 w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'quiz') {
+    const currentQ = quizQuestions[currentQIndex];
+    const isCorrect = isAnswerSubmitted && selectedOption === currentQ.correct;
+
+    return (
+      <div className="h-[100dvh] bg-neutral-900 text-neutral-100 p-2 sm:p-4 md:p-8 flex justify-center items-center overflow-hidden">
+        <div className="max-w-3xl w-full bg-neutral-800 rounded-xl shadow-2xl flex flex-col max-h-[96dvh] border border-neutral-700">
+          
+          <div className="bg-neutral-900 border-b border-yellow-400/30 p-3 sm:p-5 flex justify-between items-center flex-shrink-0">
+            <div className="flex items-center text-yellow-400 font-bold tracking-widest text-xs sm:text-sm">
+              <Radiation className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2" />
+              <span className="truncate max-w-[150px] sm:max-w-[300px]">作答中 - {userInfo.name}</span>
+            </div>
+            <div className="text-neutral-400 text-xs sm:text-sm whitespace-nowrap">
+              Question {currentQIndex + 1} / {quizQuestions.length}
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 md:p-8 overflow-y-auto flex-grow custom-scrollbar">
+            <h3 className="text-lg sm:text-xl md:text-2xl font-medium leading-relaxed mb-4 sm:mb-6">
+              {currentQ.question}
+            </h3>
+
+            <div className="space-y-2 sm:space-y-3">
+              {currentQ.options.map((opt, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleOptionSelect(idx)}
+                  disabled={isAnswerSubmitted}
+                  className={`w-full text-left p-3 sm:p-4 rounded border transition-all duration-200 
+                    ${selectedOption === idx 
+                      ? 'border-yellow-400 bg-yellow-400/10 text-yellow-400' 
+                      : 'border-neutral-600 hover:border-neutral-400 text-neutral-300 hover:bg-neutral-700/50'}
+                    ${isAnswerSubmitted && idx === currentQ.correct ? 'border-green-500 bg-green-500/10 text-green-400' : ''}
+                    ${isAnswerSubmitted && selectedOption === idx && !isCorrect ? 'border-red-500 bg-red-500/10 text-red-400' : ''}
+                  `}
+                >
+                  <div className="flex items-center">
+                    <span className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-neutral-900 mr-3 sm:mr-4 text-xs sm:text-sm font-mono border border-neutral-700 flex-shrink-0">
+                      {String.fromCharCode(65 + idx)}
+                    </span>
+                    <span className="text-sm sm:text-base leading-snug">{opt}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {isAnswerSubmitted && (
+              <div className="mt-4 sm:mt-6 p-4 sm:p-5 bg-neutral-900 border-l-4 border-yellow-400 rounded-r animate-fade-in">
+                <div className="flex items-center mb-1 sm:mb-2">
+                  {isCorrect ? (
+                    <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-green-500 mr-2" />
+                  ) : (
+                    <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-500 mr-2" />
+                  )}
+                  <span className={`font-bold text-base sm:text-lg ${isCorrect ? 'text-green-500' : 'text-red-500'}`}>
+                    {isCorrect ? '狀態：觀念正確' : '狀態：觀念有誤'}
+                  </span>
+                </div>
+                <div className="text-neutral-300 mt-2 text-sm sm:text-base leading-relaxed">
+                  <span className="text-yellow-400 font-bold mr-2">【專業分析】</span>
+                  {currentQ.explanation}
+                </div>
+              </div>
+            )}
+
+            {isAnswerSubmitted && (
+              <div className="mt-6 sm:mt-8 flex justify-end animate-fade-in">
+                <button
+                  onClick={handleNextQuestion}
+                  className="w-full sm:w-auto px-6 py-3 sm:px-8 bg-neutral-100 text-neutral-900 font-bold rounded hover:bg-white transition-colors flex items-center justify-center text-sm sm:text-base"
+                >
+                  {currentQIndex < quizQuestions.length - 1 ? '進入下一題' : '查看學習分析'} <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'report') {
+    const wrongAnswers = userAnswers.filter(a => !a.isCorrect);
+    const score = Math.round(((userAnswers.length - wrongAnswers.length) / userAnswers.length) * 100);
+    
+    return (
+      <div className="min-h-[100dvh] bg-neutral-900 text-neutral-100 flex flex-col justify-center items-center p-2 sm:p-6 font-sans py-8">
+        
+        <div className="w-full max-w-3xl overflow-hidden rounded-xl shadow-2xl relative">
+          <div ref={reportRef} className="bg-neutral-900 flex flex-col justify-start border-8 border-neutral-800" style={{ width: '100%', minHeight: '1115px', backgroundColor: '#171717', padding: '30px' }}>
+            
+            <div className="bg-yellow-400 text-neutral-900 p-5 sm:p-6 rounded-xl shadow-sm flex flex-col sm:flex-row items-center justify-between mb-4 flex-shrink-0">
+              <div className="flex items-center mb-3 sm:mb-0">
+                <FileText className="w-10 h-10 mr-4" />
+                <div>
+                  <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-1 tracking-wide">輻射防護互動式測驗-個人學習分析</h2>
+                  <div className="text-neutral-800 font-bold text-sm sm:text-base tracking-wide border-t border-neutral-900/20 pt-1 mt-1">
+                    {userInfo.department} | {userInfo.jobCategory} | {userInfo.name}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl sm:text-4xl font-black">{score}%</div>
+                <div className="text-xs sm:text-sm font-bold mt-1">準確率</div>
+              </div>
+            </div>
+
+            <div className="bg-neutral-800/80 rounded-xl border border-neutral-700 p-5 sm:p-6 shadow-inner flex-grow flex flex-col">
+              {score === 100 ? (
+                <>
+                  <h3 className="text-lg sm:text-xl font-bold text-green-400 mb-4 flex items-center border-b border-neutral-700 pb-3">
+                    <CheckCircle2 className="w-5 h-5 mr-2" /> 你超棒！輻射防護關鍵重點整理
+                  </h3>
+                  <div className="bg-neutral-900 p-5 rounded-lg border border-green-500/30">
+                    <div className="text-neutral-300 text-sm sm:text-base leading-relaxed space-y-4">
+                      <p><strong className="text-green-400 mr-2">1. ALARA原則：</strong>將輻射曝露保持在合理抑低之盡可能低的水準。</p>
+                      <p><strong className="text-green-400 mr-2">2. 距離防護：</strong>無屏蔽時，應與射源保持至少 2 公尺（約 6 英尺）以上距離。</p>
+                      <p><strong className="text-green-400 mr-2">3. 劑量計配戴：</strong>應佩戴於鉛衣內側（軀幹部位）以準確評估全身有效劑量。</p>
+                      <p><strong className="text-green-400 mr-2">4. 防護三原則：</strong>縮短「時間」、增加「距離」、增加「屏蔽」。</p>
+                      <p><strong className="text-green-400 mr-2">5. 孕婦劑量限度：</strong>確知懷孕後，剩餘妊娠期間腹部表面等效劑量不得超過 2 毫西弗。</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg sm:text-xl font-bold text-yellow-400 mb-4 flex items-center border-b border-neutral-700 pb-3 flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 mr-2" /> 需補強學習段落
+                  </h3>
+                  
+                  <div className="space-y-3 sm:space-y-4">
+                    {wrongAnswers.map((ans, idx) => (
+                      <div key={idx} className="bg-neutral-900 p-3 sm:p-4 rounded-lg border border-red-500/30">
+                        <div className="font-medium text-sm sm:text-base mb-1.5 text-neutral-200">
+                          <span className="text-neutral-500 mr-2">Q:</span>
+                          {ans.questionText}
+                        </div>
+                        <div className="text-neutral-400 text-xs sm:text-sm leading-snug border-l-2 border-yellow-400 pl-3 py-1">
+                          <span className="font-bold text-yellow-400 inline-block mr-1">正確觀念：</span>
+                          {ans.explanation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full max-w-3xl flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4 mt-6">
+          <div className="flex flex-col items-center w-full sm:w-auto">
+            {score <= 60 && (
+              <span className="text-neutral-500 text-xs sm:text-sm mb-1.5 font-medium tracking-wider">加強印象並取得高分</span>
+            )}
+            <button 
+              onClick={handleRetake}
+              disabled={isDownloading}
+              className="w-full sm:w-auto px-6 py-3 bg-neutral-700 text-neutral-200 font-bold rounded hover:bg-neutral-600 transition-colors flex items-center justify-center disabled:opacity-50"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              再測一次
+            </button>
+          </div>
+
+          <button 
+            onClick={handleComplete}
+            disabled={isDownloading}
+            className="w-full sm:w-auto px-6 py-3 sm:px-8 sm:py-4 bg-yellow-400 text-neutral-900 font-bold rounded hover:bg-yellow-300 transition-colors flex items-center justify-center shadow-lg disabled:opacity-70 disabled:cursor-wait"
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                處理中...
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5 mr-2" />
+                我完成並理解觀念了
+              </>
+            )}
+          </button>
+        </div>
+
+      </div>
+    );
+  }
+
+  return null;
+}
