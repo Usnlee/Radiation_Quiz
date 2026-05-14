@@ -31,16 +31,19 @@
         }
         /* 讓 select 在深色模式下好看一點 */
         select option {
-            background-color: #262626; /* neutral-800 */
-            color: #f5f5f5; /* neutral-100 */
+            background-color: #262626;
+            color: #f5f5f5;
         }
     </style>
 </head>
 <body class="bg-neutral-900 text-neutral-100 font-sans overflow-x-hidden">
+    <!-- 浮動提示框容器 -->
+    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none"></div>
+    
     <div id="root"></div>
 
     <script>
-        // --- 預設測驗題目 ---
+        // --- 預設測驗題目 (已校正錯字：受曝、曝露、佩戴) ---
         const quizQuestions = [
             {
                 id: 1,
@@ -104,7 +107,7 @@
             }
         ];
 
-        // --- 職類選項 ---
+        // 醫事職類選項
         const jobCategories = [
             "醫師/中醫師/牙醫師",
             "護理師/護士/助產師",
@@ -128,7 +131,7 @@
 
         // --- 全域狀態 ---
         let state = {
-            step: 'cover', 
+            step: 'cover',
             userInfo: { department: '', name: '', jobCategory: '' },
             currentQIndex: 0,
             selectedOption: null,
@@ -136,6 +139,27 @@
             userAnswers: [],
             isDownloading: false
         };
+
+        // --- 顯示浮動提示框 (取代原有的 alert) ---
+        function showToast(message, isSuccess = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colorClass = isSuccess ? 'border-green-500 text-green-400' : 'border-yellow-400 text-yellow-400';
+            const iconName = isSuccess ? 'check-circle-2' : 'alert-circle';
+            
+            toast.className = `bg-neutral-800 border ${colorClass} px-4 py-3 rounded shadow-xl animate-fade-in flex items-center mb-3 text-sm sm:text-base transition-all duration-300 transform`;
+            toast.innerHTML = `<i data-lucide="${iconName}" class="w-5 h-5 mr-2"></i><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
 
         // --- 畫面渲染邏輯 ---
         function render() {
@@ -177,7 +201,7 @@
                     <div class="pt-10 sm:pt-16 border-t border-neutral-800 w-full mt-4">
                         <p class="text-xs sm:text-sm text-neutral-500 uppercase tracking-widest">
                             Dalin Tzu-Chi Radiation Protection Team<br />
-                            版本日期 2026.04 v2
+                            版本日期 2026.05 v2
                         </p>
                     </div>
                 </div>
@@ -185,7 +209,7 @@
         }
 
         function renderUserInfo() {
-            const options = jobCategories.map(job => 
+            const optionsHtml = jobCategories.map(job => 
                 `<option value="${job}" ${state.userInfo.jobCategory === job ? 'selected' : ''}>${job}</option>`
             ).join('');
 
@@ -218,7 +242,7 @@
                                     class="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base appearance-none cursor-pointer"
                                 >
                                     <option value="" disabled ${!state.userInfo.jobCategory ? 'selected' : ''}>請選擇職類</option>
-                                    ${options}
+                                    ${optionsHtml}
                                 </select>
                                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-neutral-400">
                                     <i data-lucide="chevron-down" class="w-4 h-4"></i>
@@ -452,7 +476,7 @@
             const name = document.getElementById('input-name').value;
 
             if (!dept.trim() || !name.trim() || !job) {
-                alert('請填寫完整的科室單位、職類與姓名');
+                showToast('請填寫完整的科室單位、職類與姓名');
                 return;
             }
             state.userInfo = { department: dept, name: name, jobCategory: job };
@@ -524,7 +548,6 @@
 
                 await window.html2pdf().set(opt).from(element).save();
 
-                const wrongAnswers = state.userAnswers.filter(a => !a.isCorrect);
                 const score = (state.userAnswers.filter(a => a.isCorrect).length / quizQuestions.length) * 100;
                 
                 const payload = {
@@ -543,10 +566,10 @@
                     body: JSON.stringify(payload)
                 });
                 
-                alert('報告已以 PDF 格式下載至您的裝置！\n(系統後台已同步將成績回傳至您的 Google 試算表)');
+                showToast('報告已下載！成績已同步回傳至試算表', true);
             } catch (error) {
                 console.error('處理失敗', error);
-                alert('產出 PDF 時發生錯誤，請稍後再試。');
+                showToast('產出 PDF 時發生錯誤，請稍後再試。');
             } finally {
                 state.isDownloading = false;
                 render();
