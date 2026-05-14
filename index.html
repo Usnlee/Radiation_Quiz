@@ -29,20 +29,25 @@
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* 讓 select 在深色模式下好看一點 */
+        select option {
+            background-color: #262626; /* neutral-800 */
+            color: #f5f5f5; /* neutral-100 */
+        }
     </style>
 </head>
 <body class="bg-neutral-900 text-neutral-100 font-sans overflow-x-hidden">
     <div id="root"></div>
 
     <script>
-        // --- 預設測驗題目 (已修復引號缺失問題) ---
+        // --- 預設測驗題目 ---
         const quizQuestions = [
             {
                 id: 1,
                 question: "輻射防護的「ALARA」原則，其核心意義為何？",
                 options: [
                     "將輻射劑量盡可能降至最低 (As Low As Reasonably Achievable)",
-                    "完全隔絕所有游離輻射的暴露",
+                    "完全隔絕所有游離輻射的曝露",
                     "限制特定非專業人員進入輻射管制區",
                     "只在必要時才穿著鉛衣等防護裝備"
                 ],
@@ -59,7 +64,7 @@
                     "不需要特別保持距離，背對即可"
                 ],
                 correct: 1,
-                explanation: "依據輻射防護規範，無屏蔽時應與射源保持至少 2 公尺（約 6 英尺）以上的距離，以利用距離平方反比定律有效降低受迫劑量。"
+                explanation: "依據輻射防護規範，無屏蔽時應與射源保持至少 2 公尺（約 6 英尺）以上的距離，以利用距離平方反比定律有效降低受曝劑量。"
             },
             {
                 id: 3,
@@ -71,7 +76,7 @@
                     "放置於抽屜內即可記錄環境劑量"
                 ],
                 correct: 1,
-                explanation: "一般情況下，人員劑量計應佩戴於鉛衣內側（軀幹部位），以準確評估人員實際接受的全身有效劑量。若有特殊規定需配戴兩枚，則內外各一。"
+                explanation: "一般情況下，人員劑量計應佩戴於鉛衣內側（軀幹部位），以準確評估人員實際接受的全身有效劑量。若有特殊規定需佩戴兩枚，則內外各一。"
             },
             {
                 id: 4,
@@ -99,9 +104,31 @@
             }
         ];
 
-        // --- 全域狀態 (代替 React useState) ---
+        // --- 職類選項 ---
+        const jobCategories = [
+            "醫師/中醫師/牙醫師",
+            "護理師/護士/助產師",
+            "醫事檢驗師/醫事檢驗生",
+            "醫事放射師/醫事放射士",
+            "藥師/藥劑生",
+            "物理治療師/物理治療生",
+            "職能治療師/職能治療生",
+            "臨床心理師/諮商心理師",
+            "呼吸治療師",
+            "語言治療師",
+            "聽力師",
+            "牙體技術師/牙體技術生",
+            "驗光師/驗光生",
+            "營養師",
+            "教授/老師",
+            "學生/實習生",
+            "行政人員",
+            "其他"
+        ];
+
+        // --- 全域狀態 ---
         let state = {
-            step: 'cover', // 'cover', 'userInfo', 'quiz', 'report'
+            step: 'cover', 
             userInfo: { department: '', name: '', jobCategory: '' },
             currentQIndex: 0,
             selectedOption: null,
@@ -119,11 +146,10 @@
             else if (state.step === 'quiz') root.innerHTML = renderQuiz();
             else if (state.step === 'report') root.innerHTML = renderReport();
 
-            // 重新初始化 Lucide Icons
             lucide.createIcons();
         }
 
-        // --- 個別畫面模板 (修復了原文遺失的 sm:, hover:, focus: 等 Tailwind 前綴) ---
+        // --- 個別畫面模板 ---
         function renderCover() {
             return `
             <div class="h-[100dvh] bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-4 sm:p-6 font-sans overflow-hidden">
@@ -159,6 +185,10 @@
         }
 
         function renderUserInfo() {
+            const options = jobCategories.map(job => 
+                `<option value="${job}" ${state.userInfo.jobCategory === job ? 'selected' : ''}>${job}</option>`
+            ).join('');
+
             return `
             <div class="h-[100dvh] bg-neutral-900 text-neutral-100 flex flex-col items-center justify-center p-4 font-sans overflow-hidden">
                 <div class="max-w-md w-full bg-neutral-800 p-6 sm:p-8 rounded-xl border border-neutral-700 shadow-2xl flex flex-col max-h-[95dvh]">
@@ -175,20 +205,25 @@
                                 type="text" 
                                 value="${state.userInfo.department}"
                                 oninput="state.userInfo.department = this.value"
-                                placeholder="例如：放射科 / OO醫院急診室"
+                                placeholder="例如：影像醫學科 / OO醫院放射科"
                                 class="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base"
                             />
                         </div>
                         <div>
                             <label class="block text-xs sm:text-sm font-medium text-neutral-400 mb-1 sm:mb-2">職類</label>
-                            <input 
-                                id="input-job"
-                                type="text" 
-                                value="${state.userInfo.jobCategory}"
-                                oninput="state.userInfo.jobCategory = this.value"
-                                placeholder="例如：醫師、護理師、醫事放射師"
-                                class="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base"
-                            />
+                            <div class="relative">
+                                <select 
+                                    id="input-job"
+                                    onchange="state.userInfo.jobCategory = this.value"
+                                    class="w-full bg-neutral-900 border border-neutral-600 rounded p-2 sm:p-3 text-neutral-100 focus:border-yellow-400 focus:outline-none transition-colors text-sm sm:text-base appearance-none cursor-pointer"
+                                >
+                                    <option value="" disabled ${!state.userInfo.jobCategory ? 'selected' : ''}>請選擇職類</option>
+                                    ${options}
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-neutral-400">
+                                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-xs sm:text-sm font-medium text-neutral-400 mb-1 sm:mb-2">姓名</label>
@@ -319,7 +354,7 @@
                         <div class="text-neutral-300 text-sm sm:text-base leading-relaxed space-y-4">
                             <p><strong class="text-green-400 mr-2">1. ALARA原則：</strong>將輻射曝露保持在合理抑低之盡可能低的水準。</p>
                             <p><strong class="text-green-400 mr-2">2. 距離防護：</strong>無屏蔽時，應與射源保持至少 2 公尺（約 6 英尺）以上距離。</p>
-                            <p><strong class="text-green-400 mr-2">3. 劑量計配戴：</strong>應佩戴於鉛衣內側（軀幹部位）以準確評估全身有效劑量。</p>
+                            <p><strong class="text-green-400 mr-2">3. 劑量計佩戴：</strong>應佩戴於鉛衣內側（軀幹部位）以準確評估全身有效劑量。</p>
                             <p><strong class="text-green-400 mr-2">4. 防護三原則：</strong>縮短「時間」、增加「距離」、增加「屏蔽」。</p>
                             <p><strong class="text-green-400 mr-2">5. 孕婦劑量限度：</strong>確知懷孕後，剩餘妊娠期間腹部表面等效劑量不得超過 2 毫西弗。</p>
                         </div>
@@ -416,7 +451,7 @@
             const job = document.getElementById('input-job').value;
             const name = document.getElementById('input-name').value;
 
-            if (!dept.trim() || !name.trim() || !job.trim()) {
+            if (!dept.trim() || !name.trim() || !job) {
                 alert('請填寫完整的科室單位、職類與姓名');
                 return;
             }
@@ -469,10 +504,9 @@
 
         window.handleComplete = async () => {
             state.isDownloading = true;
-            render(); // 更新為處理中狀態
+            render(); 
             
             try {
-                // 抓取欲輸出的元素節點
                 const element = document.getElementById('report-content');
                 const opt = {
                     margin:       [0, 0, 0, 0],
@@ -488,10 +522,8 @@
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
                 };
 
-                // 產生並下載 PDF
                 await window.html2pdf().set(opt).from(element).save();
 
-                // 計算成績
                 const wrongAnswers = state.userAnswers.filter(a => !a.isCorrect);
                 const score = (state.userAnswers.filter(a => a.isCorrect).length / quizQuestions.length) * 100;
                 
@@ -503,7 +535,6 @@
                     timestamp: new Date().toISOString()
                 };
 
-                // 呼叫 Google Apps Script
                 const googleAppsScriptUrl = 'https://script.google.com/macros/s/AKfycbwbIcgORYwHixs6d-XO45ztdHsTIZuLndyLcs1A9EGwEhkTQ01816s-CZ5SYKWfr2cAGw/exec'; 
                 await fetch(googleAppsScriptUrl, {
                     method: 'POST',
@@ -512,13 +543,13 @@
                     body: JSON.stringify(payload)
                 });
                 
-                alert('報告已以 PDF 格式下載至您的裝置！\\n(系統後台已同步將成績回傳至您的 Google 試算表)');
+                alert('報告已以 PDF 格式下載至您的裝置！\n(系統後台已同步將成績回傳至您的 Google 試算表)');
             } catch (error) {
                 console.error('處理失敗', error);
                 alert('產出 PDF 時發生錯誤，請稍後再試。');
             } finally {
                 state.isDownloading = false;
-                render(); // 恢復按鈕狀態
+                render();
             }
         };
 
